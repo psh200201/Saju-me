@@ -1,4 +1,74 @@
 # Saju-me
-# 사주웹 
 
-사주 관련 프로젝트입니다.
+이름·생년월일·태어난 시간·성별·양력/음력을 입력하면 **Gemini API**로 사주를 해석해 주는 웹 서비스입니다.
+
+## 주요 기능
+
+- 사주 입력 폼 (이름, 생년월일, 시간, 성별, 양력/음력)
+- Gemini `gemini-3.6-flash` 기반 사주 해석
+- 해석 결과 **실시간 스트리밍** (글자가 생성되는 대로 표시)
+- 로딩 중 **스켈레톤 UI**
+- 마크다운 형식 결과 렌더링 (제목, 표, 강조 등)
+
+## 기술 스택
+
+- React + Vite
+- Google Gemini Interactions API
+- react-markdown, remark-gfm
+
+## 로컬 실행
+
+### 1. 의존성 설치
+
+```bash
+npm install
+```
+
+### 2. 환경 변수 설정
+
+프로젝트 루트에 `.env` 파일을 만들고 API 키를 넣습니다.
+
+```env
+VITE_GEMINI_API_KEY=your_api_key_here
+```
+
+`.env.example`을 참고할 수 있습니다. **`.env`는 Git에 올리지 마세요.**
+
+### 3. 개발 서버 실행
+
+```bash
+npm run dev
+```
+
+브라우저에서 표시되는 주소(예: `http://localhost:5173`)로 접속합니다.
+
+## 빌드
+
+```bash
+npm run build
+npm run preview
+```
+
+## Netlify 배포
+
+1. GitHub 저장소를 Netlify에 연결합니다.
+2. **Site configuration → Environment variables**에서 아래 변수를 추가합니다.
+   - `VITE_GEMINI_API_KEY` = Gemini API 키
+3. **Contains secret values** 체크 후 저장합니다.
+4. **Trigger deploy**로 다시 배포합니다. (환경 변수는 빌드 시점에 반영됩니다)
+
+> `VITE_` 접두사가 붙은 변수는 빌드된 프론트엔드에 포함될 수 있습니다. 공개 서비스라면 API 키는 서버(Functions 등)로 옮기는 것을 권장합니다.
+
+## 프로젝트 구조
+
+```
+App.jsx              # 입력 폼, 스트리밍 결과 UI
+App.css / index.css  # 스타일
+gemini.js            # Gemini API 스트리밍 호출
+sajuSystemPrompt.js  # 사주 해석 시스템 프롬프트
+vite.config.js       # Vite 설정 (env 주입 플러그인)
+```
+
+## 라이선스
+
+개인 학습·프로젝트용입니다.
