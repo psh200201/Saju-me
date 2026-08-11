@@ -1,122 +1,161 @@
 import { useState } from 'react'
-import reactLogo from './react.svg'
-import viteLogo from './vite.svg'
-import heroImg from './hero.png'
-import iconsUrl from './icons.svg?url'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './App.css'
+import { analyzeSaju } from './gemini.js'
+
+function ResultSkeleton() {
+  return (
+    <div className="skeleton" aria-hidden="true">
+      <div className="skeleton-line w90" />
+      <div className="skeleton-line w70" />
+      <div className="skeleton-line w95" />
+      <div className="skeleton-gap" />
+      <div className="skeleton-line w80" />
+      <div className="skeleton-line w60" />
+      <div className="skeleton-line w88" />
+      <div className="skeleton-gap" />
+      <div className="skeleton-line w75" />
+      <div className="skeleton-line w92" />
+    </div>
+  )
+}
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [name, setName] = useState('')
+  const [birthDate, setBirthDate] = useState('')
+  const [birthTime, setBirthTime] = useState('')
+  const [gender, setGender] = useState('')
+  const [calendarType, setCalendarType] = useState('solar')
+
+  const [result, setResult] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleAnalyze(e) {
+    e.preventDefault()
+    setError('')
+    setResult('')
+
+    if (!name || !birthDate || !gender) {
+      setError('이름, 생년월일, 성별은 필수입니다.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await analyzeSaju(
+        { name, birthDate, birthTime, gender, calendarType },
+        {
+          // 글자가 오는 즉시 화면에 반영
+          onChunk: (text) => setResult(text),
+        },
+      )
+    } catch (err) {
+      console.error(err)
+      setError(err.message || '사주 분석 중 오류가 발생했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const showResultPanel = loading || result
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>상혁의 사주</h1>
-          <p>
-            Edit <code>App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+    <div className="app">
+      <h1>사주 입력</h1>
+
+      <form onSubmit={handleAnalyze}>
+        <label htmlFor="name">이름</label>
+        <input
+          id="name"
+          type="text"
+          placeholder="이름을 입력하세요"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={loading}
+        />
+
+        <label htmlFor="birthDate">생년월일</label>
+        <input
+          id="birthDate"
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+          disabled={loading}
+        />
+
+        <label htmlFor="birthTime">태어난 시간</label>
+        <input
+          id="birthTime"
+          type="time"
+          value={birthTime}
+          onChange={(e) => setBirthTime(e.target.value)}
+          disabled={loading}
+        />
+
+        <label htmlFor="gender">성별</label>
+        <select
+          id="gender"
+          value={gender}
+          onChange={(e) => setGender(e.target.value)}
+          disabled={loading}
         >
-          Count is {count}
+          <option value="">선택하세요</option>
+          <option value="male">남성</option>
+          <option value="female">여성</option>
+        </select>
+
+        <fieldset className="calendar-type" disabled={loading}>
+          <legend>양력 / 음력</legend>
+          <label>
+            <input
+              type="radio"
+              name="calendarType"
+              value="solar"
+              checked={calendarType === 'solar'}
+              onChange={(e) => setCalendarType(e.target.value)}
+            />
+            양력
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="calendarType"
+              value="lunar"
+              checked={calendarType === 'lunar'}
+              onChange={(e) => setCalendarType(e.target.value)}
+            />
+            음력
+          </label>
+        </fieldset>
+
+        <button type="submit" disabled={loading}>
+          {loading ? '해석 생성 중…' : '사주 보기'}
         </button>
-      </section>
+      </form>
 
-      <div className="ticks"></div>
+      {error && <p className="error">{error}</p>}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href={`${iconsUrl}#documentation-icon`}></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href={`${iconsUrl}#social-icon`}></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href={`${iconsUrl}#github-icon`}></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href={`${iconsUrl}#discord-icon`}></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href={`${iconsUrl}#x-icon`}></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href={`${iconsUrl}#bluesky-icon`}></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {showResultPanel && (
+        <section className="result">
+          <h2>
+            사주 해석
+            {loading && <span className="streaming-badge">작성 중</span>}
+          </h2>
+          <div className={`result-body ${loading ? 'is-streaming' : ''}`}>
+            {loading && !result ? (
+              <ResultSkeleton />
+            ) : (
+              <>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{result}</ReactMarkdown>
+                {loading && <span className="cursor" aria-hidden="true" />}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+    </div>
   )
 }
 
