@@ -69,7 +69,8 @@
 .sidebar-new:disabled,
 .sidebar-item:disabled,
 .ghost-btn:disabled,
-.submit-btn:disabled {
+.submit-btn:disabled,
+.secondary-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -278,6 +279,32 @@
   background: var(--c1);
   color: var(--text);
   font-weight: 700;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.form-actions .submit-btn {
+  margin-top: 0;
+  flex: 1;
+}
+
+.secondary-btn {
+  font: inherit;
+  padding: 12px 14px;
+  border: 1px solid rgba(47, 74, 40, 0.14);
+  border-radius: 12px;
+  cursor: pointer;
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  background: var(--c4);
 }
 
 .submit-btn:hover:not(:disabled) {

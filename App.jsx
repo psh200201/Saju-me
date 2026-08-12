@@ -59,6 +59,8 @@ function App() {
   const [resultRevealKey, setResultRevealKey] = useState(0)
   const [toast, setToast] = useState('')
   const [copied, setCopied] = useState(false)
+  const [savingInfo, setSavingInfo] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const resultRef = useRef(null)
   const nameInputRef = useRef(null)
@@ -173,16 +175,87 @@ function App() {
     }
   }
 
+  function buildReadingPayload(resultText) {
+    return {
+      name: name.trim(),
+      birth_date: birthDate,
+      birth_time: birthTime || null,
+      gender,
+      calendar_type: calendarType,
+      result: resultText,
+    }
+  }
+
+  async function handleSaveInfo() {
+    if (!selectedId) return
+    if (!validateForm()) {
+      setError('이름, 생년월일, 성별은 필수입니다.')
+      return
+    }
+
+    setSavingInfo(true)
+    setError('')
+
+    const { data, error: updateError } = await supabase
+      .from('saju_readings')
+      .update(buildReadingPayload(result))
+      .eq('id', selectedId)
+      .select('id, name, created_at')
+      .single()
+
+    setSavingInfo(false)
+
+    if (updateError) {
+      console.error(updateError)
+      setError('정보 수정에 실패했습니다.')
+      return
+    }
+
+    setReadings((prev) =>
+      prev.map((item) => (item.id === selectedId ? { ...item, name: data.name } : item)),
+    )
+    showToast('입력 정보가 수정되었습니다')
+  }
+
+  async function handleDeleteReading() {
+    if (!selectedId) return
+    const ok = window.confirm('이 저장된 사주를 삭제할까요?')
+    if (!ok) return
+
+    setDeleting(true)
+    setError('')
+
+    const { error: deleteError } = await supabase
+      .from('saju_readings')
+      .delete()
+      .eq('id', selectedId)
+
+    setDeleting(false)
+
+    if (deleteError) {
+      console.error(deleteError)
+      setError('삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+      return
+    }
+
+    setReadings((prev) => prev.filter((item) => item.id !== selectedId))
+    handleNewReading()
+    showToast('저장된 사주를 삭제했습니다')
+  }
+
   async function handleAnalyze(e) {
     e.preventDefault()
     setError('')
-    setResult('')
-    setSelectedId(null)
     setCopied(false)
 
     if (!validateForm()) {
       setError('이름, 생년월일, 성별은 필수입니다.')
       return
+    }
+
+    const editingId = selectedId
+    if (!editingId) {
+      setResult('')
     }
 
     setLoading(true)
@@ -194,28 +267,42 @@ function App() {
         },
       )
 
-      const { data, error: insertError } = await supabase
-        .from('saju_readings')
-        .insert({
-          name: name.trim(),
-          birth_date: birthDate,
-          birth_time: birthTime || null,
-          gender,
-          calendar_type: calendarType,
-          result: fullText,
-        })
-        .select('id, name, created_at')
-        .single()
+      if (editingId) {
+        const { data, error: updateError } = await supabase
+          .from('saju_readings')
+          .update(buildReadingPayload(fullText))
+          .eq('id', editingId)
+          .select('id, name, created_at')
+          .single()
 
-      if (insertError) {
-        console.error(insertError)
-        setError('사주 결과는 생성됐지만 저장에 실패했습니다.')
-        return
+        if (updateError) {
+          console.error(updateError)
+          setError('사주 결과는 생성됐지만 수정 저장에 실패했습니다.')
+          return
+        }
+
+        setSelectedId(data.id)
+        setReadings((prev) =>
+          prev.map((item) => (item.id === editingId ? data : item)),
+        )
+        showToast('사주가 수정되었습니다')
+      } else {
+        const { data, error: insertError } = await supabase
+          .from('saju_readings')
+          .insert(buildReadingPayload(fullText))
+          .select('id, name, created_at')
+          .single()
+
+        if (insertError) {
+          console.error(insertError)
+          setError('사주 결과는 생성됐지만 저장에 실패했습니다.')
+          return
+        }
+
+        setSelectedId(data.id)
+        setReadings((prev) => [data, ...prev.filter((item) => item.id !== data.id)])
+        showToast('사주가 저장되었습니다')
       }
-
-      setSelectedId(data.id)
-      setReadings((prev) => [data, ...prev.filter((item) => item.id !== data.id)])
-      showToast('사주가 저장되었습니다')
     } catch (err) {
       console.error(err)
       setError(err.message || '사주 분석 중 오류가 발생했습니다.')
@@ -227,6 +314,7 @@ function App() {
   const showResultPanel = loading || result
   const viewingSaved = Boolean(selectedId && result && !loading)
   const canSubmit = Boolean(name.trim() && birthDate && gender) && !loading
+  const isBusy = loading || savingInfo || deleting
 
   return (
     <div className="layout">
@@ -242,7 +330,7 @@ function App() {
           type="button"
           className="sidebar-new"
           onClick={handleNewReading}
-          disabled={loading}
+          disabled={isBusy}
         >
           새 사주 만들기
         </button>
@@ -264,7 +352,7 @@ function App() {
                   type="button"
                   className={`sidebar-item ${selectedId === item.id ? 'is-active' : ''}`}
                   onClick={() => handleSelectReading(item.id)}
-                  disabled={loading}
+                  disabled={isBusy}
                   aria-current={selectedId === item.id ? 'true' : undefined}
                 >
                   <span className="sidebar-item-name">{item.name}</span>
@@ -310,7 +398,7 @@ function App() {
                 setName(e.target.value)
                 if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: false }))
               }}
-              disabled={loading}
+              disabled={isBusy}
               autoComplete="name"
               aria-invalid={fieldErrors.name ? 'true' : undefined}
               className={fieldErrors.name ? 'has-error' : ''}
@@ -331,7 +419,7 @@ function App() {
                   setFieldErrors((prev) => ({ ...prev, birthDate: false }))
                 }
               }}
-              disabled={loading}
+              disabled={isBusy}
               aria-invalid={fieldErrors.birthDate ? 'true' : undefined}
               className={fieldErrors.birthDate ? 'has-error' : ''}
             />
@@ -346,7 +434,7 @@ function App() {
               type="time"
               value={birthTime}
               onChange={(e) => setBirthTime(e.target.value)}
-              disabled={loading}
+              disabled={isBusy}
             />
             <p className="field-hint">모르면 비워 두어도 됩니다.</p>
           </div>
@@ -362,7 +450,7 @@ function App() {
                 setGender(e.target.value)
                 if (fieldErrors.gender) setFieldErrors((prev) => ({ ...prev, gender: false }))
               }}
-              disabled={loading}
+              disabled={isBusy}
               aria-invalid={fieldErrors.gender ? 'true' : undefined}
               className={fieldErrors.gender ? 'has-error' : ''}
             >
@@ -372,7 +460,7 @@ function App() {
             </select>
           </div>
 
-          <fieldset className="calendar-type" disabled={loading}>
+          <fieldset className="calendar-type" disabled={isBusy}>
             <legend>양력 / 음력</legend>
             <label>
               <input
@@ -396,9 +484,25 @@ function App() {
             </label>
           </fieldset>
 
-          <button type="submit" className="submit-btn" disabled={!canSubmit && !loading}>
-            {loading ? '해석 생성 중…' : viewingSaved ? '다시 사주 보기' : '사주 보기'}
-          </button>
+          <div className="form-actions">
+            {viewingSaved && (
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={handleSaveInfo}
+                disabled={isBusy || !canSubmit}
+              >
+                {savingInfo ? '저장 중…' : '정보 수정'}
+              </button>
+            )}
+            <button type="submit" className="submit-btn" disabled={!canSubmit && !loading}>
+              {loading
+                ? '해석 생성 중…'
+                : viewingSaved
+                  ? '다시 사주 보기'
+                  : '사주 보기'}
+            </button>
+          </div>
         </form>
 
         {error && (
@@ -428,6 +532,16 @@ function App() {
                     <button type="button" className="ghost-btn" onClick={handleCopyResult}>
                       {copied ? '복사됨' : '복사'}
                     </button>
+                    {viewingSaved && (
+                      <button
+                        type="button"
+                        className="ghost-btn danger"
+                        onClick={handleDeleteReading}
+                        disabled={deleting}
+                      >
+                        {deleting ? '삭제 중…' : '삭제'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -473,6 +587,14 @@ function App() {
 
             {viewingSaved && (
               <div className="result-footer">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={handleSaveInfo}
+                  disabled={isBusy || !canSubmit}
+                >
+                  {savingInfo ? '저장 중…' : '정보 수정'}
+                </button>
                 <button type="button" className="ghost-btn" onClick={handleNewReading}>
                   새 사주 만들기
                 </button>
