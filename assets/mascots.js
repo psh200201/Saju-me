@@ -1,3 +1,4 @@
+import dongguk from './dongguk.png'
 import meongAnalyze from './meong-analyze.png'
 import meongExpert from './meong-expert.png'
 import meongHeart from './meong-heart.png'
@@ -9,6 +10,7 @@ import meongSleep from './meong-sleep.png'
 import meongWave from './meong-wave.png'
 
 export const mascots = {
+  dongguk,
   analyze: meongAnalyze,
   expert: meongExpert,
   heart: meongHeart,
