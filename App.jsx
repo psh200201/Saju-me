@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './App.css'
+import meongImg from './assets/mascot/meong.png'
 import { analyzeSaju } from './gemini.js'
 import { supabase } from './supabase.js'
 
@@ -42,8 +43,9 @@ function formatShortDate(value) {
   }).format(date)
 }
 
-function getUserLabel(user) {
+function getUserLabel(user, profile) {
   return (
+    profile?.name ||
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     user?.email ||
@@ -51,10 +53,140 @@ function getUserLabel(user) {
   )
 }
 
+function emptyProfileForm() {
+  return {
+    name: '',
+    birthDate: '',
+    birthTime: '',
+    gender: '',
+    calendarType: 'solar',
+  }
+}
+
+function profileToForm(profile) {
+  if (!profile) return emptyProfileForm()
+  return {
+    name: profile.name ?? '',
+    birthDate: profile.birth_date ?? '',
+    birthTime: profile.birth_time ? String(profile.birth_time).slice(0, 5) : '',
+    gender: profile.gender ?? '',
+    calendarType: profile.calendar_type ?? 'solar',
+  }
+}
+
+function ProfileFields({
+  values,
+  onChange,
+  fieldErrors,
+  disabled,
+  nameInputRef,
+}) {
+  function update(key, value) {
+    onChange({ ...values, [key]: value })
+  }
+
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="profile-name">
+          이름 <span className="required">필수</span>
+        </label>
+        <input
+          ref={nameInputRef}
+          id="profile-name"
+          type="text"
+          placeholder="이름을 입력하세요"
+          value={values.name}
+          onChange={(e) => update('name', e.target.value)}
+          disabled={disabled}
+          autoComplete="name"
+          className={fieldErrors.name ? 'has-error' : ''}
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="profile-birthDate">
+          생년월일 <span className="required">필수</span>
+        </label>
+        <input
+          id="profile-birthDate"
+          type="date"
+          value={values.birthDate}
+          onChange={(e) => update('birthDate', e.target.value)}
+          disabled={disabled}
+          className={fieldErrors.birthDate ? 'has-error' : ''}
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="profile-birthTime">
+          태어난 시간 <span className="optional">선택</span>
+        </label>
+        <input
+          id="profile-birthTime"
+          type="time"
+          value={values.birthTime}
+          onChange={(e) => update('birthTime', e.target.value)}
+          disabled={disabled}
+        />
+        <p className="field-hint">모르면 비워 두어도 됩니다.</p>
+      </div>
+
+      <div className="field">
+        <label htmlFor="profile-gender">
+          성별 <span className="required">필수</span>
+        </label>
+        <select
+          id="profile-gender"
+          value={values.gender}
+          onChange={(e) => update('gender', e.target.value)}
+          disabled={disabled}
+          className={fieldErrors.gender ? 'has-error' : ''}
+        >
+          <option value="">선택하세요</option>
+          <option value="male">남성</option>
+          <option value="female">여성</option>
+        </select>
+      </div>
+
+      <fieldset className="calendar-type" disabled={disabled}>
+        <legend>양력 / 음력</legend>
+        <label>
+          <input
+            type="radio"
+            name="profileCalendarType"
+            value="solar"
+            checked={values.calendarType === 'solar'}
+            onChange={(e) => update('calendarType', e.target.value)}
+          />
+          양력
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="profileCalendarType"
+            value="lunar"
+            checked={values.calendarType === 'lunar'}
+            onChange={(e) => update('calendarType', e.target.value)}
+          />
+          음력
+        </label>
+      </fieldset>
+    </>
+  )
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [authBusy, setAuthBusy] = useState(false)
+  const [profile, setProfile] = useState(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileForm, setProfileForm] = useState(emptyProfileForm())
+  const [profileErrors, setProfileErrors] = useState({})
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showProfileEdit, setShowProfileEdit] = useState(false)
 
   const [name, setName] = useState('')
   const [birthDate, setBirthDate] = useState('')
@@ -66,24 +198,87 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [listLoading, setListLoading] = useState(true)
   const [error, setError] = useState('')
-  const [fieldErrors, setFieldErrors] = useState({})
   const [readings, setReadings] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [resultRevealKey, setResultRevealKey] = useState(0)
   const [toast, setToast] = useState('')
+  const [toastLeaving, setToastLeaving] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [savingInfo, setSavingInfo] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const resultRef = useRef(null)
-  const nameInputRef = useRef(null)
   const formRef = useRef(null)
+  const profileNameRef = useRef(null)
   const toastTimerRef = useRef(null)
+  const toastClearRef = useRef(null)
 
   function showToast(message) {
-    setToast(message)
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = setTimeout(() => setToast(''), 2600)
+    if (toastClearRef.current) clearTimeout(toastClearRef.current)
+
+    setToastLeaving(false)
+    setToast(message)
+
+    toastTimerRef.current = setTimeout(() => {
+      setToastLeaving(true)
+      toastClearRef.current = setTimeout(() => {
+        setToast('')
+        setToastLeaving(false)
+      }, 280)
+    }, 2600)
+  }
+
+  function applyProfileToForm(nextProfile = profile) {
+    const form = profileToForm(nextProfile)
+    setName(form.name)
+    setBirthDate(form.birthDate)
+    setBirthTime(form.birthTime)
+    setGender(form.gender)
+    setCalendarType(form.calendarType)
+  }
+
+  function clearReadingView() {
+    setResult('')
+    setError('')
+    setSelectedId(null)
+    setResultRevealKey(0)
+    setCopied(false)
+  }
+
+  async function loadProfile(currentUser) {
+    if (!currentUser) {
+      setProfile(null)
+      setShowOnboarding(false)
+      return null
+    }
+
+    setProfileLoading(true)
+    const { data, error: fetchError } = await supabase
+      .from('users')
+      .select('id, name, birth_date, birth_time, gender, calendar_type, updated_at')
+      .eq('id', currentUser.id)
+      .maybeSingle()
+
+    setProfileLoading(false)
+
+    if (fetchError) {
+      console.error(fetchError)
+      setError('프로필을 불러오지 못했습니다.')
+      return null
+    }
+
+    if (!data) {
+      setProfile(null)
+      setProfileForm(emptyProfileForm())
+      setShowOnboarding(true)
+      setShowProfileEdit(false)
+      return null
+    }
+
+    setProfile(data)
+    setShowOnboarding(false)
+    applyProfileToForm(data)
+    return data
   }
 
   async function loadReadings() {
@@ -110,20 +305,6 @@ function App() {
     setListLoading(false)
   }
 
-  function resetForm() {
-    setName('')
-    setBirthDate('')
-    setBirthTime('')
-    setGender('')
-    setCalendarType('solar')
-    setResult('')
-    setError('')
-    setFieldErrors({})
-    setSelectedId(null)
-    setResultRevealKey(0)
-    setCopied(false)
-  }
-
   useEffect(() => {
     let mounted = true
 
@@ -137,9 +318,9 @@ function App() {
       window.history.replaceState({}, document.title, window.location.pathname)
     }
 
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
       if (!mounted) return
-      if (error) console.error(error)
+      if (sessionError) console.error(sessionError)
       setUser(session?.user ?? null)
       setAuthLoading(false)
     })
@@ -156,18 +337,28 @@ function App() {
       mounted = false
       subscription.unsubscribe()
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      if (toastClearRef.current) clearTimeout(toastClearRef.current)
     }
   }, [])
 
   useEffect(() => {
     if (authLoading) return
+
     if (!user) {
+      setProfile(null)
       setReadings([])
       setListLoading(false)
-      resetForm()
+      setShowOnboarding(false)
+      setShowProfileEdit(false)
+      clearReadingView()
+      applyProfileToForm(null)
       return
     }
-    loadReadings()
+
+    ;(async () => {
+      await loadProfile(user)
+      await loadReadings()
+    })()
   }, [user?.id, authLoading])
 
   useEffect(() => {
@@ -180,18 +371,87 @@ function App() {
     resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [loading])
 
-  function validateForm() {
+  useEffect(() => {
+    if (!(showOnboarding || showProfileEdit)) return
+    requestAnimationFrame(() => profileNameRef.current?.focus())
+  }, [showOnboarding, showProfileEdit])
+
+  function validateProfileValues(values) {
     const nextErrors = {}
-    if (!name.trim()) nextErrors.name = true
-    if (!birthDate) nextErrors.birthDate = true
-    if (!gender) nextErrors.gender = true
-    setFieldErrors(nextErrors)
+    if (!values.name.trim()) nextErrors.name = true
+    if (!values.birthDate) nextErrors.birthDate = true
+    if (!values.gender) nextErrors.gender = true
+    setProfileErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
+  }
+
+  function buildUserPayload(values) {
+    return {
+      id: user.id,
+      name: values.name.trim(),
+      birth_date: values.birthDate,
+      birth_time: values.birthTime || null,
+      gender: values.gender,
+      calendar_type: values.calendarType,
+    }
+  }
+
+  function buildReadingPayload(resultText) {
+    return {
+      name: name.trim(),
+      birth_date: birthDate,
+      birth_time: birthTime || null,
+      gender,
+      calendar_type: calendarType,
+      result: resultText,
+      user_id: user.id,
+    }
+  }
+
+  async function handleSaveProfile(e) {
+    e.preventDefault()
+    if (!user) return
+
+    if (!validateProfileValues(profileForm)) {
+      setError('이름, 생년월일, 성별은 필수입니다.')
+      return
+    }
+
+    setProfileSaving(true)
+    setError('')
+
+    const payload = buildUserPayload(profileForm)
+    const { data, error: saveError } = await supabase
+      .from('users')
+      .upsert(payload, { onConflict: 'id' })
+      .select('id, name, birth_date, birth_time, gender, calendar_type, updated_at')
+      .single()
+
+    setProfileSaving(false)
+
+    if (saveError) {
+      console.error(saveError)
+      setError('프로필 저장에 실패했습니다.')
+      return
+    }
+
+    setProfile(data)
+    setShowOnboarding(false)
+    setShowProfileEdit(false)
+    applyProfileToForm(data)
+    clearReadingView()
+    showToast(showOnboarding ? '프로필이 저장되었습니다' : '프로필이 수정되었습니다')
+  }
+
+  function openProfileEdit() {
+    setProfileForm(profileToForm(profile))
+    setProfileErrors({})
+    setError('')
+    setShowProfileEdit(true)
   }
 
   async function handleSelectReading(id) {
     setError('')
-    setFieldErrors({})
     setCopied(false)
     setSelectedId(id)
 
@@ -216,12 +476,35 @@ function App() {
     setResultRevealKey((key) => key + 1)
   }
 
-  function handleNewReading() {
-    resetForm()
+  function handleNewReading({ silent = false } = {}) {
+    const alreadyOnNewPage = !selectedId && !result && !loading
+
+    if (alreadyOnNewPage) {
+      applyProfileToForm(profile)
+      requestAnimationFrame(() => {
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        formRef.current?.classList.remove('is-attention')
+        // restart animation
+        void formRef.current?.offsetWidth
+        formRef.current?.classList.add('is-attention')
+      })
+      if (!silent) {
+        showToast('이미 새 사주 화면이 열려 있어요')
+      }
+      return
+    }
+
+    clearReadingView()
+    applyProfileToForm(profile)
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      nameInputRef.current?.focus()
+      formRef.current?.classList.remove('is-attention')
+      void formRef.current?.offsetWidth
+      formRef.current?.classList.add('is-attention')
     })
+    if (!silent) {
+      showToast('새 사주 화면으로 이동했어요')
+    }
   }
 
   async function handleGoogleLogin() {
@@ -267,48 +550,6 @@ function App() {
     }
   }
 
-  function buildReadingPayload(resultText) {
-    return {
-      name: name.trim(),
-      birth_date: birthDate,
-      birth_time: birthTime || null,
-      gender,
-      calendar_type: calendarType,
-      result: resultText,
-    }
-  }
-
-  async function handleSaveInfo() {
-    if (!selectedId || !user) return
-    if (!validateForm()) {
-      setError('이름, 생년월일, 성별은 필수입니다.')
-      return
-    }
-
-    setSavingInfo(true)
-    setError('')
-
-    const { data, error: updateError } = await supabase
-      .from('saju_readings')
-      .update(buildReadingPayload(result))
-      .eq('id', selectedId)
-      .select('id, name, created_at')
-      .single()
-
-    setSavingInfo(false)
-
-    if (updateError) {
-      console.error(updateError)
-      setError('정보 수정에 실패했습니다.')
-      return
-    }
-
-    setReadings((prev) =>
-      prev.map((item) => (item.id === selectedId ? { ...item, name: data.name } : item)),
-    )
-    showToast('입력 정보가 수정되었습니다')
-  }
-
   async function handleDeleteReading() {
     if (!selectedId) return
     const ok = window.confirm('이 저장된 사주를 삭제할까요?')
@@ -331,7 +572,7 @@ function App() {
     }
 
     setReadings((prev) => prev.filter((item) => item.id !== selectedId))
-    handleNewReading()
+    handleNewReading({ silent: true })
     showToast('저장된 사주를 삭제했습니다')
   }
 
@@ -340,28 +581,25 @@ function App() {
     setError('')
     setCopied(false)
 
-    if (!user) {
-      setError('Google 로그인 후 이용해 주세요.')
+    if (!user || !profile) {
+      setError('프로필을 먼저 저장해 주세요.')
+      setShowOnboarding(true)
       return
     }
 
-    if (!validateForm()) {
+    if (!name.trim() || !birthDate || !gender) {
       setError('이름, 생년월일, 성별은 필수입니다.')
       return
     }
 
     const editingId = selectedId
-    if (!editingId) {
-      setResult('')
-    }
+    if (!editingId) setResult('')
 
     setLoading(true)
     try {
       const fullText = await analyzeSaju(
         { name: name.trim(), birthDate, birthTime, gender, calendarType },
-        {
-          onChunk: (text) => setResult(text),
-        },
+        { onChunk: (text) => setResult(text) },
       )
 
       if (editingId) {
@@ -379,17 +617,12 @@ function App() {
         }
 
         setSelectedId(data.id)
-        setReadings((prev) =>
-          prev.map((item) => (item.id === editingId ? data : item)),
-        )
+        setReadings((prev) => prev.map((item) => (item.id === editingId ? data : item)))
         showToast('사주가 수정되었습니다')
       } else {
         const { data, error: insertError } = await supabase
           .from('saju_readings')
-          .insert({
-            ...buildReadingPayload(fullText),
-            user_id: user.id,
-          })
+          .insert(buildReadingPayload(fullText))
           .select('id, name, created_at')
           .single()
 
@@ -413,16 +646,18 @@ function App() {
 
   const showResultPanel = loading || result
   const viewingSaved = Boolean(selectedId && result && !loading)
-  const canSubmit = Boolean(name.trim() && birthDate && gender) && !loading
-  const isBusy = loading || savingInfo || deleting
-  const userLabel = user ? getUserLabel(user) : ''
+  const canSubmit = Boolean(profile && name.trim() && birthDate && gender) && !loading
+  const isBusy = loading || deleting || profileSaving
+  const userLabel = user ? getUserLabel(user, profile) : ''
   const userAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture
+  const blockingUi = showOnboarding || profileLoading
 
   if (authLoading) {
     return (
       <div className="auth-screen">
-        <div className="auth-card">
-          <p className="auth-loading">로그인 확인 중…</p>
+        <div className="auth-hero">
+          <img src={meongImg} alt="" className="meong-hero meong-float" />
+          <p className="auth-loading">멍이 준비 중이에요…</p>
         </div>
       </div>
     )
@@ -431,18 +666,26 @@ function App() {
   if (!user) {
     return (
       <div className="auth-screen">
-        <div className="auth-card">
-          <h1 className="auth-title">사주-me</h1>
-          <p className="auth-lead">
-            Google 로그인 후 사주를 저장하고 언제든 다시 볼 수 있어요.
-          </p>
+        <div className="auth-hero">
+          <img src={meongImg} alt="사주 전문가 멍" className="meong-hero" />
+          <div className="auth-hero-copy">
+            <p className="auth-eyebrow">사주 전문가 멍</p>
+            <h1 className="auth-title">사주-me</h1>
+            <p className="auth-lead">
+              다정하게 말하지만, 분석은 정확하게.
+              <br />
+              Google로 로그인하고 내 사주를 시작해 보세요.
+            </p>
+          </div>
           <button
             type="button"
             className="google-btn"
             onClick={handleGoogleLogin}
             disabled={authBusy}
           >
-            <span className="google-icon" aria-hidden="true">G</span>
+            <span className="google-icon" aria-hidden="true">
+              G
+            </span>
             {authBusy ? '로그인 중…' : 'Google로 로그인'}
           </button>
           {error && (
@@ -456,32 +699,38 @@ function App() {
   }
 
   return (
-    <div className="layout">
+    <div className={`layout ${blockingUi ? 'is-blocked' : ''}`}>
       <aside className="sidebar" aria-label="저장된 사주 목록">
+        <div className="sidebar-brand">
+          <img src={meongImg} alt="" className="meong-sidebar" />
+          <div>
+            <p className="sidebar-brand-name">사주 전문가 멍</p>
+            <p className="sidebar-brand-sub">다정하게, 정확하게</p>
+          </div>
+        </div>
+
         <div className="sidebar-heading">
           <h2 className="sidebar-title">저장된 사주</h2>
-          {!listLoading && (
-            <span className="sidebar-count">{readings.length}</span>
-          )}
+          {!listLoading && <span className="sidebar-count">{readings.length}</span>}
         </div>
 
         <button
           type="button"
           className="sidebar-new"
           onClick={handleNewReading}
-          disabled={isBusy}
+          disabled={isBusy || !profile}
         >
-          새 사주 만들기
+          새 사주 보기
         </button>
 
-        {listLoading ? (
+        {listLoading || profileLoading ? (
           <div className="sidebar-loading" aria-live="polite">
             목록 불러오는 중…
           </div>
         ) : readings.length === 0 ? (
           <p className="sidebar-empty">
             아직 저장된 사주가 없습니다.
-            <span>첫 사주를 만들어 보세요.</span>
+            <span>프로필 저장 후 첫 사주를 만들어 보세요.</span>
           </p>
         ) : (
           <ul className="sidebar-list">
@@ -491,7 +740,7 @@ function App() {
                   type="button"
                   className={`sidebar-item ${selectedId === item.id ? 'is-active' : ''}`}
                   onClick={() => handleSelectReading(item.id)}
-                  disabled={isBusy}
+                  disabled={isBusy || !profile}
                   aria-current={selectedId === item.id ? 'true' : undefined}
                 >
                   <span className="sidebar-item-name">{item.name}</span>
@@ -520,19 +769,76 @@ function App() {
               <p className="auth-email">{user.email}</p>
             </div>
           </div>
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={handleLogout}
-            disabled={authBusy || isBusy}
-          >
-            로그아웃
-          </button>
+          <div className="auth-actions">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={openProfileEdit}
+              disabled={isBusy || !profile || showOnboarding}
+            >
+              프로필 수정
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={handleLogout}
+              disabled={authBusy || isBusy}
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
 
+        {profile && (
+          <section className="profile-card">
+            <div className="profile-card-header">
+              <h2>내 프로필</h2>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={openProfileEdit}
+                disabled={isBusy}
+              >
+                수정
+              </button>
+            </div>
+            <dl className="profile-meta">
+              <div>
+                <dt>이름</dt>
+                <dd>{profile.name}</dd>
+              </div>
+              <div>
+                <dt>생년월일</dt>
+                <dd>
+                  {profile.birth_date} ({formatCalendar(profile.calendar_type)})
+                </dd>
+              </div>
+              <div>
+                <dt>태어난 시간</dt>
+                <dd>
+                  {profile.birth_time
+                    ? String(profile.birth_time).slice(0, 5)
+                    : '모름'}
+                </dd>
+              </div>
+              <div>
+                <dt>성별</dt>
+                <dd>{formatGender(profile.gender)}</dd>
+              </div>
+            </dl>
+          </section>
+        )}
+
         <header className="app-header">
-          <h1>사주 입력</h1>
-          <p className="app-lead">이름·생년월일·성별을 입력하면 사주 해석을 바로 확인할 수 있어요.</p>
+          <div className="app-header-row">
+            <img src={meongImg} alt="" className="meong-header" />
+            <div>
+              <h1>사주 보기</h1>
+              <p className="app-lead">
+                멍이 프로필을 보고 흐름을 읽어 줄게요. 다정하게, 하지만 정확하게.
+              </p>
+            </div>
+          </div>
         </header>
 
         {viewingSaved && (
@@ -541,89 +847,53 @@ function App() {
               <strong>{name}</strong>님의 저장된 사주를 보고 있습니다.
             </div>
             <button type="button" className="mode-banner-btn" onClick={handleNewReading}>
-              새 사주 만들기
+              새 사주 보기
             </button>
           </div>
         )}
 
-        <form ref={formRef} className="saju-form" onSubmit={handleAnalyze} noValidate>
+        <form
+          ref={formRef}
+          className="saju-form"
+          onSubmit={handleAnalyze}
+          noValidate
+          onAnimationEnd={(e) => {
+            if (e.target === formRef.current) {
+              formRef.current?.classList.remove('is-attention')
+            }
+          }}
+        >
+          <p className="form-note">
+            {viewingSaved
+              ? '당시 해석에 사용된 정보예요. 새 해석은 현재 프로필 기준으로 다시 만들 수 있어요.'
+              : '아래 값은 프로필에서 불러왔어요. 이번만 바꿔서 해석해도 괜찮아요.'}
+          </p>
+
           <div className="field">
-            <label htmlFor="name">
-              이름 <span className="required">필수</span>
-            </label>
-            <input
-              ref={nameInputRef}
-              id="name"
-              type="text"
-              placeholder="이름을 입력하세요"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value)
-                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: false }))
-              }}
-              disabled={isBusy}
-              autoComplete="name"
-              aria-invalid={fieldErrors.name ? 'true' : undefined}
-              className={fieldErrors.name ? 'has-error' : ''}
-            />
+            <label htmlFor="name">이름</label>
+            <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} disabled={isBusy || !profile} />
           </div>
 
           <div className="field">
-            <label htmlFor="birthDate">
-              생년월일 <span className="required">필수</span>
-            </label>
-            <input
-              id="birthDate"
-              type="date"
-              value={birthDate}
-              onChange={(e) => {
-                setBirthDate(e.target.value)
-                if (fieldErrors.birthDate) {
-                  setFieldErrors((prev) => ({ ...prev, birthDate: false }))
-                }
-              }}
-              disabled={isBusy}
-              aria-invalid={fieldErrors.birthDate ? 'true' : undefined}
-              className={fieldErrors.birthDate ? 'has-error' : ''}
-            />
+            <label htmlFor="birthDate">생년월일</label>
+            <input id="birthDate" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} disabled={isBusy || !profile} />
           </div>
 
           <div className="field">
-            <label htmlFor="birthTime">
-              태어난 시간 <span className="optional">선택</span>
-            </label>
-            <input
-              id="birthTime"
-              type="time"
-              value={birthTime}
-              onChange={(e) => setBirthTime(e.target.value)}
-              disabled={isBusy}
-            />
-            <p className="field-hint">모르면 비워 두어도 됩니다.</p>
+            <label htmlFor="birthTime">태어난 시간</label>
+            <input id="birthTime" type="time" value={birthTime} onChange={(e) => setBirthTime(e.target.value)} disabled={isBusy || !profile} />
           </div>
 
           <div className="field">
-            <label htmlFor="gender">
-              성별 <span className="required">필수</span>
-            </label>
-            <select
-              id="gender"
-              value={gender}
-              onChange={(e) => {
-                setGender(e.target.value)
-                if (fieldErrors.gender) setFieldErrors((prev) => ({ ...prev, gender: false }))
-              }}
-              disabled={isBusy}
-              aria-invalid={fieldErrors.gender ? 'true' : undefined}
-              className={fieldErrors.gender ? 'has-error' : ''}
-            >
+            <label htmlFor="gender">성별</label>
+            <select id="gender" value={gender} onChange={(e) => setGender(e.target.value)} disabled={isBusy || !profile}>
               <option value="">선택하세요</option>
               <option value="male">남성</option>
               <option value="female">여성</option>
             </select>
           </div>
 
-          <fieldset className="calendar-type" disabled={isBusy}>
+          <fieldset className="calendar-type" disabled={isBusy || !profile}>
             <legend>양력 / 음력</legend>
             <label>
               <input
@@ -648,16 +918,6 @@ function App() {
           </fieldset>
 
           <div className="form-actions">
-            {viewingSaved && (
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={handleSaveInfo}
-                disabled={isBusy || !canSubmit}
-              >
-                {savingInfo ? '저장 중…' : '정보 수정'}
-              </button>
-            )}
             <button type="submit" className="submit-btn" disabled={!canSubmit && !loading}>
               {loading
                 ? '해석 생성 중…'
@@ -668,7 +928,7 @@ function App() {
           </div>
         </form>
 
-        {error && (
+        {error && !showOnboarding && !showProfileEdit && (
           <p className="error" role="alert">
             {error}
           </p>
@@ -684,9 +944,7 @@ function App() {
             <div className="result-header">
               <div className="result-title-row">
                 <h2>
-                  {viewingSaved || (!loading && name)
-                    ? `${name}님 사주 해석`
-                    : '사주 해석'}
+                  {viewingSaved || (!loading && name) ? `${name}님 사주 해석` : '사주 해석'}
                   {loading && <span className="streaming-badge">작성 중</span>}
                   {viewingSaved && <span className="saved-badge">저장됨</span>}
                 </h2>
@@ -735,6 +993,18 @@ function App() {
               </div>
             )}
 
+            {!loading && result && (
+              <div className="meong-narrator">
+                <img src={meongImg} alt="" className="meong-narrator-img" />
+                <div>
+                  <p className="meong-narrator-label">사주 전문가 멍</p>
+                  <p className="meong-narrator-text">
+                    편하게 들어 주세요. 말투는 다정하지만, 분석은 냉정하게 할게요.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div
               className={`result-body ${loading ? 'is-streaming' : ''} ${viewingSaved ? 'is-revealed' : ''}`}
             >
@@ -750,16 +1020,8 @@ function App() {
 
             {viewingSaved && (
               <div className="result-footer">
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  onClick={handleSaveInfo}
-                  disabled={isBusy || !canSubmit}
-                >
-                  {savingInfo ? '저장 중…' : '정보 수정'}
-                </button>
                 <button type="button" className="ghost-btn" onClick={handleNewReading}>
-                  새 사주 만들기
+                  새 사주 보기
                 </button>
               </div>
             )}
@@ -767,8 +1029,71 @@ function App() {
         )}
       </div>
 
+      {(showOnboarding || showProfileEdit) && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-modal-title"
+          >
+            <h2 id="profile-modal-title">
+              {showOnboarding ? '프로필 정보를 입력해 주세요' : '프로필 수정'}
+            </h2>
+            <p className="modal-lead">
+              {showOnboarding
+                ? '처음 오셨네요. 멍이 사주를 보려면 기본 정보가 필요해요. 저장해 두면 다음부터 바로 불러올게요.'
+                : '저장된 프로필은 새 사주 해석 시 자동으로 불러와요.'}
+            </p>
+
+            <form className="modal-form" onSubmit={handleSaveProfile} noValidate>
+              <ProfileFields
+                values={profileForm}
+                onChange={setProfileForm}
+                fieldErrors={profileErrors}
+                disabled={profileSaving}
+                nameInputRef={profileNameRef}
+              />
+
+              {error && (
+                <p className="error" role="alert">
+                  {error}
+                </p>
+              )}
+
+              <div className="modal-actions">
+                {!showOnboarding && (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      setShowProfileEdit(false)
+                      setError('')
+                    }}
+                    disabled={profileSaving}
+                  >
+                    취소
+                  </button>
+                )}
+                <button type="submit" className="submit-btn" disabled={profileSaving}>
+                  {profileSaving
+                    ? '저장 중…'
+                    : showOnboarding
+                      ? '저장하고 시작하기'
+                      : '프로필 저장'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {toast && (
-        <div className="toast" role="status" aria-live="polite">
+        <div
+          className={`toast ${toastLeaving ? 'is-leaving' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
           {toast}
         </div>
       )}

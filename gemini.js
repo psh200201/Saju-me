@@ -19,7 +19,8 @@ export async function analyzeSaju(form, { onChunk } = {}) {
     form.gender === 'male' ? '남성' : form.gender === 'female' ? '여성' : '미선택'
   const calendarLabel = form.calendarType === 'lunar' ? '음력' : '양력'
 
-  const input = `다음 사람의 사주를 해석해 주세요.
+  const input = `사주 전문가 멍의 시선으로 다음 사람의 사주를 해석해 주세요.
+다정한 말투로 말하되, 분석은 냉철하고 명확하게 해 주세요.
 
 - 이름: ${form.name}
 - 생년월일: ${form.birthDate} (${calendarLabel})

@@ -31,6 +31,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), geminiEnvPlugin(apiKey)],
-    publicDir: false,
+    publicDir: 'public',
   }
 })

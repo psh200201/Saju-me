@@ -5,10 +5,11 @@
 ## 주요 기능
 
 - Google 로그인 (Supabase Auth)
-- 사주 입력 폼 (이름, 생년월일, 시간, 성별, 양력/음력)
+- 유저 프로필(`users`) 저장 및 첫 로그인 프로필 모달
+- 사주 입력 폼 (프로필 자동 불러오기)
 - Gemini `gemini-3.6-flash` 기반 사주 해석
 - 해석 결과 **실시간 스트리밍**
-- 내 사주 저장/조회/수정/삭제 (Supabase + RLS)
+- 사주 결과(`saju_readings`) 저장/조회/수정/삭제
 - 사이드바 히스토리
 
 ## 기술 스택
@@ -63,15 +64,18 @@ npm run build
 npm run preview
 ```
 
-## Netlify 배포
+## Netlify / Vercel 배포
 
-1. GitHub 저장소를 Netlify에 연결합니다.
-2. **Site configuration → Environment variables**에 아래를 추가합니다.
+1. GitHub 저장소를 배포 플랫폼에 연결합니다.
+2. 환경 변수에 아래를 추가합니다.
    - `VITE_GEMINI_API_KEY`
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
-3. 배포 후 Supabase Redirect URLs에 Netlify 사이트 URL을 추가합니다.
+3. 배포 후 Supabase Redirect URLs에 사이트 URL을 추가합니다.
+   - 예: `https://saju-me-woad.vercel.app/**`
 4. **Trigger deploy**로 다시 배포합니다.
+
+공개 사이트: https://saju-me-woad.vercel.app/
 
 ## 프로젝트 구조
 
