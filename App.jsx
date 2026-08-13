@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './App.css'
-import meongImg from './assets/mascot/meong.png'
+import meongAnalyze from './assets/meong-analyze.png'
+import meongExpert from './assets/meong-expert.png'
+import meongHeart from './assets/meong-heart.png'
+import meongMascot from './assets/meong-mascot.png'
+import meongProfile from './assets/meong-profile.png'
+import meongReading from './assets/meong-reading.png'
+import meongScroll from './assets/meong-scroll.png'
+import meongSleep from './assets/meong-sleep.png'
+import meongWave from './assets/meong-wave.png'
 import { analyzeSaju } from './gemini.js'
 import { supabase } from './supabase.js'
 
@@ -35,6 +43,10 @@ function formatCalendar(value) {
 
 function formatShortDate(value) {
   if (!value) return ''
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    return `${Number(match[2])}월 ${Number(match[3])}일`
+  }
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat('ko-KR', {
@@ -315,7 +327,7 @@ function App() {
     setListLoading(true)
     const { data, error: fetchError } = await supabase
       .from('saju_readings')
-      .select('id, name, created_at')
+      .select('id, name, birth_date, created_at')
       .order('created_at', { ascending: false })
 
     if (fetchError) {
@@ -511,7 +523,7 @@ function App() {
         result: fullText,
         user_id: user.id,
       })
-      .select('id, name, created_at, share_token, is_shared')
+      .select('id, name, birth_date, created_at, share_token, is_shared')
       .single()
 
     if (insertError) {
@@ -757,7 +769,7 @@ function App() {
 
     const shareUrl = getShareUrl(data.share_token)
     const shareTitle = `${name}님 사주 해석`
-    const shareText = '멍이 풀어 준 사주 결과를 확인해 보세요.'
+    const shareText = '아코가 풀어 준 사주 결과를 확인해 보세요.'
 
     try {
       if (navigator.share) {
@@ -874,7 +886,7 @@ function App() {
           .from('saju_readings')
           .update(buildReadingPayload(fullText))
           .eq('id', editingId)
-          .select('id, name, created_at, share_token, is_shared')
+          .select('id, name, birth_date, created_at, share_token, is_shared')
           .single()
 
         if (updateError) {
@@ -921,8 +933,8 @@ function App() {
     return (
       <div className="auth-screen">
         <div className="auth-hero">
-          <img src={meongImg} alt="" className="meong-hero meong-float" />
-          <p className="auth-loading">멍이 준비 중이에요…</p>
+          <img src={meongSleep} alt="" className="meong-hero meong-float" />
+          <p className="auth-loading">아코가 준비 중이에요…</p>
         </div>
       </div>
     )
@@ -932,9 +944,9 @@ function App() {
     <div className={`layout ${blockingUi ? 'is-blocked' : ''}`}>
       <aside className="sidebar" aria-label="저장된 사주 목록">
         <div className="sidebar-brand">
-          <img src={meongImg} alt="" className="meong-sidebar" />
+          <img src={meongWave} alt="" className="meong-sidebar" />
           <div>
-            <p className="sidebar-brand-name">사주 전문가 멍</p>
+            <p className="sidebar-brand-name">사주 전문가 아코</p>
             <p className="sidebar-brand-sub">다정하게, 정확하게</p>
           </div>
         </div>
@@ -957,10 +969,13 @@ function App() {
 
         {!user ? (
           <div className="sidebar-guest">
-            <p className="sidebar-empty">
-              로그인하면 해석을 저장하고
-              <span>언제든 다시 볼 수 있어요.</span>
-            </p>
+            <div className="sidebar-empty-art">
+              <img src={meongSleep} alt="" className="meong-sidebar-empty" />
+              <p className="sidebar-empty">
+                로그인하면 해석을 저장하고
+                <span>언제든 다시 볼 수 있어요.</span>
+              </p>
+            </div>
             <button
               type="button"
               className="google-btn sidebar-login"
@@ -978,10 +993,13 @@ function App() {
             목록 불러오는 중…
           </div>
         ) : readings.length === 0 ? (
-          <p className="sidebar-empty">
-            아직 저장된 사주가 없습니다.
-            <span>첫 사주를 만들어 보세요.</span>
-          </p>
+          <div className="sidebar-empty-art">
+            <img src={meongMascot} alt="" className="meong-sidebar-empty" />
+            <p className="sidebar-empty">
+              아직 저장된 사주가 없습니다.
+              <span>첫 사주를 만들어 보세요.</span>
+            </p>
+          </div>
         ) : (
           <ul className="sidebar-list">
             {readings.map((item) => (
@@ -995,7 +1013,7 @@ function App() {
                 >
                   <span className="sidebar-item-name">{item.name}</span>
                   <span className="sidebar-item-date">
-                    {formatShortDate(item.created_at)}
+                    {formatShortDate(item.birth_date)}
                   </span>
                 </button>
               </li>
@@ -1043,7 +1061,7 @@ function App() {
           ) : (
             <>
               <div className="auth-user">
-                <img src={meongImg} alt="" className="auth-avatar" />
+                <img src={meongWave} alt="" className="auth-avatar" />
                 <div>
                   <p className="auth-name">게스트로 체험 중</p>
                   <p className="auth-email">전체 결과는 로그인 후 확인할 수 있어요</p>
@@ -1065,63 +1083,83 @@ function App() {
 
         {profile && (
           <section className="profile-card">
-            <div className="profile-card-header">
-              <h2>내 프로필</h2>
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={openProfileEdit}
-                disabled={isBusy}
-              >
-                수정
-              </button>
+            <div className="profile-card-visual">
+              <img src={meongExpert} alt="" className="meong-profile-side" />
             </div>
-            <dl className="profile-meta">
-              <div>
-                <dt>이름</dt>
-                <dd>{profile.name}</dd>
+            <div className="profile-card-body">
+              <div className="profile-card-header">
+                <h2>내 프로필</h2>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={openProfileEdit}
+                  disabled={isBusy}
+                >
+                  수정
+                </button>
               </div>
-              <div>
-                <dt>생년월일</dt>
-                <dd>
-                  {profile.birth_date} ({formatCalendar(profile.calendar_type)})
-                </dd>
-              </div>
-              <div>
-                <dt>태어난 시간</dt>
-                <dd>
-                  {profile.birth_time
-                    ? String(profile.birth_time).slice(0, 5)
-                    : '모름'}
-                </dd>
-              </div>
-              <div>
-                <dt>성별</dt>
-                <dd>{formatGender(profile.gender)}</dd>
-              </div>
-            </dl>
+              <dl className="profile-meta">
+                <div>
+                  <dt>이름</dt>
+                  <dd>{profile.name}</dd>
+                </div>
+                <div>
+                  <dt>생년월일</dt>
+                  <dd>
+                    {profile.birth_date} ({formatCalendar(profile.calendar_type)})
+                  </dd>
+                </div>
+                <div>
+                  <dt>태어난 시간</dt>
+                  <dd>
+                    {profile.birth_time
+                      ? String(profile.birth_time).slice(0, 5)
+                      : '모름'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>성별</dt>
+                  <dd>{formatGender(profile.gender)}</dd>
+                </div>
+              </dl>
+            </div>
           </section>
         )}
 
         <header className="app-header">
           <div className="app-header-row">
-            <img src={meongImg} alt="" className="meong-header" />
+            <img src={meongScroll} alt="" className="meong-header" />
             <div>
               <h1>사주 보기</h1>
               <p className="app-lead">
                 {user
-                  ? '멍이 프로필을 보고 흐름을 읽어 줄게요. 다정하게, 하지만 정확하게.'
+                  ? '아코가 프로필을 보고 흐름을 읽어 줄게요. 다정하게, 하지만 정확하게.'
                   : '로그인 없이 바로 체험해 보세요. 전체 해석은 로그인 후 열립니다.'}
               </p>
             </div>
           </div>
           {readingsCount != null && readingsCount > 0 && (
             <p className="trust-stat">
-              총 <strong>{readingsCount.toLocaleString('ko-KR')}</strong>개의 사주가
-              생성되었습니다
+              <img src={meongHeart} alt="" className="trust-stat-meong" />
+              <span>
+                총 <strong>{readingsCount.toLocaleString('ko-KR')}</strong>개의 사주가
+                생성되었습니다
+              </span>
             </p>
           )}
         </header>
+
+        {!user && !result && !loading && (
+          <div className="mascot-guide size-md">
+            <img src={meongProfile} alt="" className="mascot-illust" />
+            <div>
+              <p className="mascot-guide-title">먼저 기본 정보만 알려 주세요</p>
+              <p className="mascot-guide-text">
+                이름·생년월일·성별이면 충분해요. 아코가 바로 흐름을 읽어 줄게요.
+              </p>
+            </div>
+          </div>
+        )}
 
         {viewingSaved && (
           <div className="mode-banner" role="status">
@@ -1318,11 +1356,26 @@ function App() {
               </div>
             )}
 
+            {loading && (
+              <div className="meong-analyzing-wrap">
+                <img
+                  src={meongAnalyze}
+                  alt=""
+                  className="meong-analyzing meong-float"
+                />
+                <p className="meong-analyzing-text">아코가 사주를 꼼꼼히 살펴보는 중…</p>
+              </div>
+            )}
+
             {!loading && result && (
               <div className="meong-narrator">
-                <img src={meongImg} alt="" className="meong-narrator-img" />
+                <img
+                  src={isPaywalled ? meongHeart : viewingSaved ? meongScroll : meongReading}
+                  alt=""
+                  className="meong-narrator-img"
+                />
                 <div>
-                  <p className="meong-narrator-label">사주 전문가 멍</p>
+                  <p className="meong-narrator-label">사주 전문가 아코</p>
                   <p className="meong-narrator-text">
                     {isPaywalled
                       ? '앞부분은 먼저 보여 드릴게요. 이어지는 해석은 로그인하면 열려요.'
@@ -1339,7 +1392,7 @@ function App() {
                 <>
                   <ResultSkeleton />
                   {paywallActive && (
-                    <p className="result-generating-hint">멍이 해석을 쓰고 있어요…</p>
+                    <p className="result-generating-hint">아코가 해석을 쓰고 있어요…</p>
                   )}
                 </>
               ) : (
@@ -1363,7 +1416,7 @@ function App() {
                     <div className="skeleton-line w88" />
                   </div>
                   <div className="result-paywall-card">
-                    <img src={meongImg} alt="" className="result-paywall-meong" />
+                    <img src={meongHeart} alt="" className="result-paywall-meong" />
                     <h3>나머지 해석이 잠겨 있어요</h3>
                     <p>
                       {user
@@ -1422,6 +1475,11 @@ function App() {
             aria-modal="true"
             aria-labelledby="profile-modal-title"
           >
+            <img
+              src={showOnboarding ? meongWave : meongProfile}
+              alt=""
+              className="modal-mascot"
+            />
             <h2 id="profile-modal-title">
               {showOnboarding ? '프로필 정보를 입력해 주세요' : '프로필 수정'}
             </h2>
@@ -1429,7 +1487,7 @@ function App() {
               {showOnboarding
                 ? sessionStorage.getItem(PENDING_RESULT_KEY)
                   ? '거의 다 왔어요. 프로필만 저장하면 잠겨 있던 전체 해석이 바로 열려요.'
-                  : '처음 오셨네요. 멍이 사주를 보려면 기본 정보가 필요해요. 저장해 두면 다음부터 바로 불러올게요.'
+                  : '처음 오셨네요. 아코가 사주를 보려면 기본 정보가 필요해요. 저장해 두면 다음부터 바로 불러올게요.'
                 : '저장된 프로필은 새 사주 해석 시 자동으로 불러와요.'}
             </p>
 

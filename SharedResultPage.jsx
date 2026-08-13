@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import meongImg from './assets/mascot/meong.png'
+import meongReading from './assets/meong-reading.png'
+import meongScroll from './assets/meong-scroll.png'
+import meongSleep from './assets/meong-sleep.png'
+import meongWave from './assets/meong-wave.png'
 import { supabase } from './supabase.js'
 
 function formatGender(value) {
@@ -69,19 +72,27 @@ function SharedResultPage() {
     <div className="share-page">
       <div className="share-shell">
         <header className="share-top">
-          <img src={meongImg} alt="" className="meong-header" />
+          <img src={meongScroll} alt="" className="meong-header" />
           <div>
-            <p className="share-eyebrow">사주 전문가 멍</p>
+            <p className="share-eyebrow">사주 전문가 아코</p>
             <h1>공유된 사주 결과</h1>
             <p className="share-lead">로그인 없이 확인할 수 있는 해석이에요.</p>
           </div>
         </header>
 
-        {loading && <p className="share-status">결과를 불러오는 중…</p>}
+        {loading && (
+          <div className="share-status-art">
+            <img src={meongSleep} alt="" className="meong-share-status meong-float" />
+            <p className="share-status">결과를 불러오는 중…</p>
+          </div>
+        )}
         {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
+          <div className="share-status-art">
+            <img src={meongWave} alt="" className="meong-share-status" />
+            <p className="error" role="alert">
+              {error}
+            </p>
+          </div>
         )}
 
         {!loading && reading && (
@@ -114,9 +125,9 @@ function SharedResultPage() {
             </div>
 
             <div className="meong-narrator">
-              <img src={meongImg} alt="" className="meong-narrator-img" />
+              <img src={meongReading} alt="" className="meong-narrator-img" />
               <div>
-                <p className="meong-narrator-label">사주 전문가 멍</p>
+                <p className="meong-narrator-label">사주 전문가 아코</p>
                 <p className="meong-narrator-text">
                   친구가 공유한 해석이에요. 말투는 다정하지만, 분석은 정확하게 적어 두었어요.
                 </p>
