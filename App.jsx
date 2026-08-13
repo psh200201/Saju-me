@@ -42,7 +42,20 @@ function formatShortDate(value) {
   }).format(date)
 }
 
+function getUserLabel(user) {
+  return (
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email ||
+    '사용자'
+  )
+}
+
 function App() {
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authBusy, setAuthBusy] = useState(false)
+
   const [name, setName] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [birthTime, setBirthTime] = useState('')
@@ -74,6 +87,12 @@ function App() {
   }
 
   async function loadReadings() {
+    if (!user) {
+      setReadings([])
+      setListLoading(false)
+      return
+    }
+
     setListLoading(true)
     const { data, error: fetchError } = await supabase
       .from('saju_readings')
@@ -91,12 +110,65 @@ function App() {
     setListLoading(false)
   }
 
+  function resetForm() {
+    setName('')
+    setBirthDate('')
+    setBirthTime('')
+    setGender('')
+    setCalendarType('solar')
+    setResult('')
+    setError('')
+    setFieldErrors({})
+    setSelectedId(null)
+    setResultRevealKey(0)
+    setCopied(false)
+  }
+
   useEffect(() => {
-    loadReadings()
+    let mounted = true
+
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, '?'))
+    const authError =
+      hashParams.get('error_description') ||
+      hashParams.get('error') ||
+      new URLSearchParams(window.location.search).get('error_description')
+    if (authError) {
+      setError(decodeURIComponent(authError.replace(/\+/g, ' ')))
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!mounted) return
+      if (error) console.error(error)
+      setUser(session?.user ?? null)
+      setAuthLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      setAuthLoading(false)
+      setAuthBusy(false)
+    })
+
     return () => {
+      mounted = false
+      subscription.unsubscribe()
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) {
+      setReadings([])
+      setListLoading(false)
+      resetForm()
+      return
+    }
+    loadReadings()
+  }, [user?.id, authLoading])
 
   useEffect(() => {
     if (!selectedId || !result || loading) return
@@ -145,21 +217,41 @@ function App() {
   }
 
   function handleNewReading() {
-    setName('')
-    setBirthDate('')
-    setBirthTime('')
-    setGender('')
-    setCalendarType('solar')
-    setResult('')
-    setError('')
-    setFieldErrors({})
-    setSelectedId(null)
-    setResultRevealKey(0)
-    setCopied(false)
+    resetForm()
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       nameInputRef.current?.focus()
     })
+  }
+
+  async function handleGoogleLogin() {
+    setAuthBusy(true)
+    setError('')
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+
+    if (signInError) {
+      console.error(signInError)
+      setError('Google 로그인에 실패했습니다.')
+      setAuthBusy(false)
+    }
+  }
+
+  async function handleLogout() {
+    setAuthBusy(true)
+    setError('')
+    const { error: signOutError } = await supabase.auth.signOut()
+    if (signOutError) {
+      console.error(signOutError)
+      setError('로그아웃에 실패했습니다.')
+      setAuthBusy(false)
+      return
+    }
+    showToast('로그아웃했습니다')
   }
 
   async function handleCopyResult() {
@@ -187,7 +279,7 @@ function App() {
   }
 
   async function handleSaveInfo() {
-    if (!selectedId) return
+    if (!selectedId || !user) return
     if (!validateForm()) {
       setError('이름, 생년월일, 성별은 필수입니다.')
       return
@@ -248,6 +340,11 @@ function App() {
     setError('')
     setCopied(false)
 
+    if (!user) {
+      setError('Google 로그인 후 이용해 주세요.')
+      return
+    }
+
     if (!validateForm()) {
       setError('이름, 생년월일, 성별은 필수입니다.')
       return
@@ -289,7 +386,10 @@ function App() {
       } else {
         const { data, error: insertError } = await supabase
           .from('saju_readings')
-          .insert(buildReadingPayload(fullText))
+          .insert({
+            ...buildReadingPayload(fullText),
+            user_id: user.id,
+          })
           .select('id, name, created_at')
           .single()
 
@@ -315,6 +415,45 @@ function App() {
   const viewingSaved = Boolean(selectedId && result && !loading)
   const canSubmit = Boolean(name.trim() && birthDate && gender) && !loading
   const isBusy = loading || savingInfo || deleting
+  const userLabel = user ? getUserLabel(user) : ''
+  const userAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture
+
+  if (authLoading) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-card">
+          <p className="auth-loading">로그인 확인 중…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-card">
+          <h1 className="auth-title">사주-me</h1>
+          <p className="auth-lead">
+            Google 로그인 후 사주를 저장하고 언제든 다시 볼 수 있어요.
+          </p>
+          <button
+            type="button"
+            className="google-btn"
+            onClick={handleGoogleLogin}
+            disabled={authBusy}
+          >
+            <span className="google-icon" aria-hidden="true">G</span>
+            {authBusy ? '로그인 중…' : 'Google로 로그인'}
+          </button>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="layout">
@@ -367,6 +506,30 @@ function App() {
       </aside>
 
       <div className="app">
+        <div className="auth-bar">
+          <div className="auth-user">
+            {userAvatar ? (
+              <img className="auth-avatar" src={userAvatar} alt="" />
+            ) : (
+              <span className="auth-avatar auth-avatar-fallback" aria-hidden="true">
+                {userLabel.slice(0, 1)}
+              </span>
+            )}
+            <div>
+              <p className="auth-name">{userLabel}</p>
+              <p className="auth-email">{user.email}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={handleLogout}
+            disabled={authBusy || isBusy}
+          >
+            로그아웃
+          </button>
+        </div>
+
         <header className="app-header">
           <h1>사주 입력</h1>
           <p className="app-lead">이름·생년월일·성별을 입력하면 사주 해석을 바로 확인할 수 있어요.</p>
