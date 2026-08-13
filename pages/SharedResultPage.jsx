@@ -1,24 +1,13 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import meongReading from './assets/meong-reading.png'
-import meongScroll from './assets/meong-scroll.png'
-import meongSleep from './assets/meong-sleep.png'
-import meongWave from './assets/meong-wave.png'
-import { supabase } from './supabase.js'
+import { mascots } from '../assets/mascots.js'
+import { trackEvent } from '../lib/analytics.js'
+import { supabase } from '../lib/supabase.js'
+import { formatBirthTime, formatCalendar, formatGender } from '../utils/format.js'
 
-function formatGender(value) {
-  if (value === 'male') return '남성'
-  if (value === 'female') return '여성'
-  return ''
-}
-
-function formatCalendar(value) {
-  return value === 'lunar' ? '음력' : '양력'
-}
-
-function SharedResultPage() {
+export default function SharedResultPage() {
   const { shareToken } = useParams()
   const [reading, setReading] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -34,6 +23,7 @@ function SharedResultPage() {
       if (!shareToken) {
         setError('잘못된 공유 링크입니다.')
         setLoading(false)
+        trackEvent('shared_result_view', { status: 'invalid' })
         return
       }
 
@@ -47,6 +37,7 @@ function SharedResultPage() {
         console.error(rpcError)
         setError('사주 결과를 불러오지 못했습니다.')
         setLoading(false)
+        trackEvent('shared_result_view', { status: 'error' })
         return
       }
 
@@ -55,11 +46,13 @@ function SharedResultPage() {
         setError('공유된 사주 결과를 찾을 수 없습니다. 링크가 만료됐거나 비공개일 수 있어요.')
         setReading(null)
         setLoading(false)
+        trackEvent('shared_result_view', { status: 'not_found' })
         return
       }
 
       setReading(row)
       setLoading(false)
+      trackEvent('shared_result_view', { status: 'success' })
     }
 
     load()
@@ -72,7 +65,7 @@ function SharedResultPage() {
     <div className="share-page">
       <div className="share-shell">
         <header className="share-top">
-          <img src={meongScroll} alt="" className="meong-header" />
+          <img src={mascots.scroll} alt="" className="meong-header" />
           <div>
             <p className="share-eyebrow">사주 전문가 아코</p>
             <h1>공유된 사주 결과</h1>
@@ -82,13 +75,13 @@ function SharedResultPage() {
 
         {loading && (
           <div className="share-status-art">
-            <img src={meongSleep} alt="" className="meong-share-status meong-float" />
+            <img src={mascots.sleep} alt="" className="meong-share-status meong-float" />
             <p className="share-status">결과를 불러오는 중…</p>
           </div>
         )}
         {error && (
           <div className="share-status-art">
-            <img src={meongWave} alt="" className="meong-share-status" />
+            <img src={mascots.wave} alt="" className="meong-share-status" />
             <p className="error" role="alert">
               {error}
             </p>
@@ -111,11 +104,7 @@ function SharedResultPage() {
                 </div>
                 <div>
                   <dt>태어난 시간</dt>
-                  <dd>
-                    {reading.birth_time
-                      ? String(reading.birth_time).slice(0, 5)
-                      : '모름'}
-                  </dd>
+                  <dd>{formatBirthTime(reading.birth_time)}</dd>
                 </div>
                 <div>
                   <dt>성별</dt>
@@ -125,7 +114,7 @@ function SharedResultPage() {
             </div>
 
             <div className="meong-narrator">
-              <img src={meongReading} alt="" className="meong-narrator-img" />
+              <img src={mascots.reading} alt="" className="meong-narrator-img" />
               <div>
                 <p className="meong-narrator-label">사주 전문가 아코</p>
                 <p className="meong-narrator-text">
@@ -141,7 +130,11 @@ function SharedResultPage() {
         )}
 
         <div className="share-footer">
-          <Link to="/" className="submit-btn share-home-btn">
+          <Link
+            to="/"
+            className="submit-btn share-home-btn"
+            onClick={() => trackEvent('shared_result_cta_click')}
+          >
             내 사주도 보러 가기
           </Link>
         </div>
@@ -149,5 +142,3 @@ function SharedResultPage() {
     </div>
   )
 }
-
-export default SharedResultPage

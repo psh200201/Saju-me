@@ -81,12 +81,15 @@ npm run preview
 ## 프로젝트 구조
 
 ```
-App.jsx              # 로그인, 입력 폼, CRUD, 스트리밍 UI
-App.css / index.css  # 스타일
-gemini.js            # Gemini API 스트리밍 호출
-supabase.js          # Supabase 클라이언트
-sajuSystemPrompt.js  # 사주 해석 시스템 프롬프트
-vite.config.js       # Vite 설정 (env 주입 플러그인)
+App.jsx                 # 페이지 조립 (컴포넌트 조합)
+main.jsx                # 라우터 진입점
+components/             # UI 컴포넌트 (Sidebar, Form, Result 등)
+hooks/useSajuApp.js     # 앱 상태·핸들러
+pages/SharedResultPage.jsx
+lib/                    # gemini, supabase, system prompt
+utils/                  # format, preview, profile helpers
+styles/                 # app.css, index.css
+assets/                 # 아코 마스코트 이미지
 ```
 
 ## 라이선스
